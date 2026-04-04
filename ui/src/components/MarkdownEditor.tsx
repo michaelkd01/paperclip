@@ -95,6 +95,17 @@ interface MentionState {
   endPos: number;
 }
 
+interface MentionMenuViewport {
+  offsetLeft: number;
+  offsetTop: number;
+  width: number;
+  height: number;
+}
+
+const MENTION_MENU_WIDTH = 188;
+const MENTION_MENU_HEIGHT = 208;
+const MENTION_MENU_PADDING = 8;
+
 const CODE_BLOCK_LANGUAGES: Record<string, string> = {
   txt: "Text",
   md: "Markdown",
@@ -168,6 +179,40 @@ function detectMention(container: HTMLElement): MentionState | null {
     textNode: textNode as Text,
     atPos,
     endPos: offset,
+  };
+}
+
+function getMentionMenuViewport(): MentionMenuViewport {
+  const viewport = window.visualViewport;
+  if (viewport) {
+    return {
+      offsetLeft: viewport.offsetLeft,
+      offsetTop: viewport.offsetTop,
+      width: viewport.width,
+      height: viewport.height,
+    };
+  }
+
+  return {
+    offsetLeft: 0,
+    offsetTop: 0,
+    width: window.innerWidth,
+    height: window.innerHeight,
+  };
+}
+
+export function computeMentionMenuPosition(
+  anchor: Pick<MentionState, "viewportTop" | "viewportLeft">,
+  viewport: MentionMenuViewport,
+) {
+  const minLeft = viewport.offsetLeft + MENTION_MENU_PADDING;
+  const maxLeft = viewport.offsetLeft + viewport.width - MENTION_MENU_WIDTH;
+  const minTop = viewport.offsetTop + MENTION_MENU_PADDING;
+  const maxTop = viewport.offsetTop + viewport.height - MENTION_MENU_HEIGHT;
+
+  return {
+    top: Math.max(minTop, Math.min(viewport.offsetTop + anchor.viewportTop + 4, maxTop)),
+    left: Math.max(minLeft, Math.min(viewport.offsetLeft + anchor.viewportLeft, maxLeft)),
   };
 }
 
@@ -417,6 +462,25 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
   }, [checkMention, mentions]);
 
   useEffect(() => {
+    if (!mentionActive) return;
+
+    const updatePosition = () => requestAnimationFrame(checkMention);
+    const viewport = window.visualViewport;
+
+    viewport?.addEventListener("resize", updatePosition);
+    viewport?.addEventListener("scroll", updatePosition);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      viewport?.removeEventListener("resize", updatePosition);
+      viewport?.removeEventListener("scroll", updatePosition);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [checkMention, mentionActive]);
+
+  useEffect(() => {
     const editable = containerRef.current?.querySelector('[contenteditable="true"]');
     if (!editable) return;
     decorateProjectMentions();
@@ -525,6 +589,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
     event.preventDefault();
     ref.current.insertMarkdown(normalizeMarkdown(rawText));
   }, []);
+
+  const mentionMenuPosition = mentionState
+    ? computeMentionMenuPosition(mentionState, getMentionMenuViewport())
+    : null;
 
   return (
     <div
@@ -645,19 +713,17 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
         createPortal(
           <div
             className="fixed z-[9999] min-w-[180px] max-w-[calc(100vw-16px)] max-h-[200px] overflow-y-auto rounded-md border border-border bg-popover shadow-md"
-            style={{
-              top: Math.min(mentionState.viewportTop + 4, window.innerHeight - 208),
-              left: Math.max(8, Math.min(mentionState.viewportLeft, window.innerWidth - 188)),
-            }}
+            style={mentionMenuPosition ?? undefined}
           >
             {filteredMentions.map((option, i) => (
               <button
                 key={option.id}
+                type="button"
                 className={cn(
                   "flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left hover:bg-accent/50 transition-colors",
                   i === mentionIndex && "bg-accent",
                 )}
-                onMouseDown={(e) => {
+                onPointerDown={(e) => {
                   e.preventDefault(); // prevent blur
                   selectMention(option);
                 }}
