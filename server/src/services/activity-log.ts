@@ -13,16 +13,12 @@ import { instanceSettingsService } from "./instance-settings.js";
 const PLUGIN_EVENT_SET: ReadonlySet<string> = new Set(PLUGIN_EVENT_TYPES);
 
 /**
- * Suppress routine-execution events from reaching the plugin bus (e.g. Slack)
- * so that heartbeat runs don't spam notifications every few minutes.
- *
- * Suppressed:
- *  - issue.created  where originKind === "routine_execution"
- *  - issue.updated  where originKind === "routine_execution" AND new status is "done"
- *
- * NOT suppressed (operator needs visibility):
- *  - routine issues that end in cancelled / blocked / error
- *  - all non-routine events
+ * Routine executions (heartbeats) generate issue lifecycle events on every cycle.
+ * Suppress plugin notifications for successful routine events to prevent noise:
+ * - issue.created from routine_execution: always suppressed (routine created the issue)
+ * - issue.updated from routine_execution with status done or in_progress: suppressed (normal lifecycle)
+ * - issue.updated from routine_execution with status cancelled/blocked/error: NOT suppressed (problem signal)
+ * Activity log DB writes and SSE/WebSocket events are unaffected.
  */
 function shouldSuppressRoutinePluginEvent(input: LogActivityInput): boolean {
   const details = input.details as Record<string, unknown> | null | undefined;
@@ -32,7 +28,7 @@ function shouldSuppressRoutinePluginEvent(input: LogActivityInput): boolean {
 
   if (input.action === "issue.updated") {
     const newStatus = details.status as string | undefined;
-    if (newStatus === "done") return true;
+    if (newStatus === "done" || newStatus === "in_progress") return true;
   }
 
   return false;
