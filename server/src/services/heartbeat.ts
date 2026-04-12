@@ -2341,7 +2341,7 @@ export function heartbeatService(db: Db) {
         continue;
       }
 
-      const shouldRetry = tracksLocalChild && !!run.processPid && (run.processLossRetryCount ?? 0) < 1;
+      const shouldRetry = tracksLocalChild && (run.processLossRetryCount ?? 0) < 1;
       const baseMessage = run.processPid
         ? `Process lost -- child pid ${run.processPid} is no longer running`
         : "Process lost -- server may have restarted";
