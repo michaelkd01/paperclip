@@ -6,6 +6,14 @@ export {
   describeClaudeFailure,
   isClaudeMaxTurnsResult,
   isClaudeUnknownSessionError,
+  detectClaudeQuotaWarning,
+  detectClaudeQuotaExhausted,
+} from "./parse.js";
+export type {
+  ClaudeRateLimits,
+  ClaudeRateLimitWindow,
+  ClaudeQuotaClassification,
+  ClaudeQuotaExhaustedMeta,
 } from "./parse.js";
 export {
   getQuotaWindows,
