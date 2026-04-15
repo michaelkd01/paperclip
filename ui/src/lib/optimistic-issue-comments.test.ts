@@ -484,6 +484,7 @@ describe("optimistic issue comments", () => {
           pauseReason: null,
           pausedAt: null,
           executionWorkspacePolicy: null,
+          defaultExecutionPolicy: null,
           codebase: {
             workspaceId: null,
             repoUrl: null,

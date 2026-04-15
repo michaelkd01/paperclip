@@ -59,7 +59,7 @@ const ISSUE_SEARCH_DEBOUNCE_MS = 150;
 /* ── View state ── */
 
 export type IssueViewState = IssueFilterState & {
-  sortField: "status" | "priority" | "title" | "created" | "updated";
+  sortField: "id" | "status" | "priority" | "title" | "created" | "updated";
   sortDir: "asc" | "desc";
   groupBy: "status" | "priority" | "assignee" | "workspace" | "parent" | "none";
   viewMode: "list" | "board";
