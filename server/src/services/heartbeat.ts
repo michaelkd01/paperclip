@@ -2410,11 +2410,15 @@ export function heartbeatService(db: Db) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
 
+    const rawMode = typeof heartbeat.mode === "string" ? heartbeat.mode : null;
+    const mode: "reactive" | "proactive" = rawMode === "proactive" ? "proactive" : "reactive";
+
     return {
       enabled: asBoolean(heartbeat.enabled, false),
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
+      mode,
     };
   }
 
@@ -2661,9 +2665,9 @@ export function heartbeatService(db: Db) {
       runningProcesses.delete(run.id);
 
       // Best-effort cleanup: kill the OS process if it's still alive.
-      // Fire-and-forget so the reaper loop isn't blocked by the 5s grace period.
-      if (tracksLocalChild && run.processPid) {
-        void cleanupChildProcess(run.processPid);
+      // Fire-and-forget so the reaper loop isn't blocked by the grace period.
+      if (tracksLocalChild && (run.processPid || run.processGroupId)) {
+        void terminateHeartbeatRunProcess({ pid: run.processPid, processGroupId: run.processGroupId });
       }
 
       reaped.push(run.id);
@@ -4034,10 +4038,10 @@ export function heartbeatService(db: Db) {
           // terminal state transition, kill it so it doesn't become a zombie.
           // Re-read the run to get the latest processPid (set by onSpawn callback).
           const finalRun = await getRun(run.id).catch(() => null);
-          if (finalRun?.processPid) {
+          if (finalRun?.processPid || finalRun?.processGroupId) {
             const finalAgent = await getAgent(run.agentId).catch(() => null);
             if (finalAgent && isTrackedLocalChildProcessAdapter(finalAgent.adapterType)) {
-              void cleanupChildProcess(finalRun.processPid);
+              void terminateHeartbeatRunProcess({ pid: finalRun.processPid, processGroupId: finalRun.processGroupId });
             }
           }
 
@@ -4368,6 +4372,23 @@ export function heartbeatService(db: Db) {
     if (source !== "timer" && !policy.wakeOnDemand) {
       await writeSkippedRequest("heartbeat.wakeOnDemand.disabled");
       return null;
+    }
+
+    // Skip timer heartbeats for reactive agents with empty inbox
+    if (source === "timer" && policy.mode === "reactive") {
+      const assignedIssues = await issuesSvc.list(agent.companyId, {
+        assigneeAgentId: agent.id,
+        status: "todo,in_progress",
+        limit: 1,
+      });
+      if (assignedIssues.length === 0) {
+        await writeSkippedRequest("heartbeat.empty_inbox");
+        logger.info(
+          { agentId: agent.id, agentName: agent.name },
+          "Skipping timer heartbeat: empty inbox (reactive mode)",
+        );
+        return null;
+      }
     }
 
     if (issueId) {
