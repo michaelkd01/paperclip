@@ -998,8 +998,8 @@ export function issueService(db: Db) {
           WHEN ${titleContainsMatch} THEN 1
           WHEN ${identifierStartsWithMatch} THEN 2
           WHEN ${identifierContainsMatch} THEN 3
-          WHEN ${descriptionContainsMatch} THEN 4
-          WHEN ${commentContainsMatch} THEN 5
+          WHEN ${commentContainsMatch} THEN 4
+          WHEN ${descriptionContainsMatch} THEN 5
           ELSE 6
         END
       `;
@@ -2123,6 +2123,28 @@ export function issueService(db: Db) {
           const comment = rows[0] ?? null;
           return comment ? redactIssueComment(comment, censorUsernameInLogs) : null;
         })),
+
+    removeComment: async (commentId: string) => {
+      const currentUserRedactionOptions = {
+        enabled: (await instanceSettings.getGeneral()).censorUsernameInLogs,
+      };
+
+      return db.transaction(async (tx) => {
+        const [comment] = await tx
+          .delete(issueComments)
+          .where(eq(issueComments.id, commentId))
+          .returning();
+
+        if (!comment) return null;
+
+        await tx
+          .update(issues)
+          .set({ updatedAt: new Date() })
+          .where(eq(issues.id, comment.issueId));
+
+        return redactIssueComment(comment, currentUserRedactionOptions.enabled);
+      });
+    },
 
     addComment: async (
       issueId: string,

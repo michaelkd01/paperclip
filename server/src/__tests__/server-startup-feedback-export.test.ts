@@ -66,6 +66,8 @@ vi.mock("../config.js", () => ({
   loadConfig: vi.fn(() => ({
     deploymentMode: "authenticated",
     deploymentExposure: "private",
+    bind: "loopback",
+    customBindHost: undefined,
     host: "127.0.0.1",
     port: 3210,
     allowedHostnames: [],
@@ -117,6 +119,13 @@ vi.mock("../services/index.js", () => ({
   heartbeatService: vi.fn(() => ({
     reapOrphanedRuns: vi.fn(async () => undefined),
     resumeQueuedRuns: vi.fn(async () => undefined),
+    reconcileStrandedAssignedIssues: vi.fn(async () => ({
+      dispatchRequeued: 0,
+      continuationRequeued: 0,
+      escalated: 0,
+      skipped: 0,
+      issueIds: [],
+    })),
     tickTimers: vi.fn(async () => ({ enqueued: 0 })),
   })),
   reconcilePersistedRuntimeServicesOnStartup: vi.fn(async () => ({ reconciled: 0 })),

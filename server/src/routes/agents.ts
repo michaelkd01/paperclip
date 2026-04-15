@@ -449,9 +449,23 @@ export function agentRoutes(db: Db) {
   function parseSchedulerHeartbeatPolicy(runtimeConfig: unknown) {
     const heartbeat = asRecord(asRecord(runtimeConfig)?.heartbeat) ?? {};
     return {
-      enabled: parseBooleanLike(heartbeat.enabled) ?? true,
+      enabled: parseBooleanLike(heartbeat.enabled) ?? false,
       intervalSec: Math.max(0, parseNumberLike(heartbeat.intervalSec) ?? 0),
     };
+  }
+
+  function normalizeNewAgentRuntimeConfig(runtimeConfig: unknown): Record<string, unknown> {
+    const parsedRuntimeConfig = asRecord(runtimeConfig);
+    const normalizedRuntimeConfig = parsedRuntimeConfig ? { ...parsedRuntimeConfig } : {};
+    const parsedHeartbeat = asRecord(normalizedRuntimeConfig.heartbeat);
+    const heartbeat = parsedHeartbeat ? { ...parsedHeartbeat } : {};
+
+    if (parseBooleanLike(heartbeat.enabled) == null) {
+      heartbeat.enabled = false;
+    }
+
+    normalizedRuntimeConfig.heartbeat = heartbeat;
+    return normalizedRuntimeConfig;
   }
 
   function generateEd25519PrivateKeyPem(): string {
@@ -950,6 +964,13 @@ export function agentRoutes(db: Db) {
   router.get("/companies/:companyId/agents", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    const unsupportedQueryParams = Object.keys(req.query).sort();
+    if (unsupportedQueryParams.length > 0) {
+      res.status(400).json({
+        error: `Unsupported query parameter${unsupportedQueryParams.length === 1 ? "" : "s"}: ${unsupportedQueryParams.join(", ")}`,
+      });
+      return;
+    }
     const result = await svc.list(companyId);
     const canReadConfigs = await actorCanReadConfigurationsForCompany(req, companyId);
     if (canReadConfigs || req.actor.type === "board") {
@@ -1308,6 +1329,7 @@ export function agentRoutes(db: Db) {
     const normalizedHireInput = {
       ...hireInput,
       adapterConfig: normalizedAdapterConfig,
+      runtimeConfig: normalizeNewAgentRuntimeConfig(hireInput.runtimeConfig),
     };
 
     const company = await db
@@ -1411,7 +1433,7 @@ export function agentRoutes(db: Db) {
     });
     const telemetryClient = getTelemetryClient();
     if (telemetryClient) {
-      trackAgentCreated(telemetryClient, { agentRole: agent.role });
+      trackAgentCreated(telemetryClient, { agentRole: agent.role, agentId: agent.id });
     }
 
     await applyDefaultAgentTaskAssignGrant(
@@ -1474,6 +1496,7 @@ export function agentRoutes(db: Db) {
     const createdAgent = await svc.create(companyId, {
       ...createInput,
       adapterConfig: normalizedAdapterConfig,
+      runtimeConfig: normalizeNewAgentRuntimeConfig(createInput.runtimeConfig),
       status: "idle",
       spentMonthlyCents: 0,
       lastHeartbeatAt: null,
@@ -1498,7 +1521,7 @@ export function agentRoutes(db: Db) {
     });
     const telemetryClient = getTelemetryClient();
     if (telemetryClient) {
-      trackAgentCreated(telemetryClient, { agentRole: agent.role });
+      trackAgentCreated(telemetryClient, { agentRole: agent.role, agentId: agent.id });
     }
 
     await applyDefaultAgentTaskAssignGrant(
@@ -2280,6 +2303,10 @@ export function agentRoutes(db: Db) {
   router.post("/heartbeat-runs/:runId/cancel", async (req, res) => {
     assertBoard(req);
     const runId = req.params.runId as string;
+    const existing = await heartbeat.getRun(runId);
+    if (existing) {
+      assertCompanyAccess(req, existing.companyId);
+    }
     const run = await heartbeat.cancelRun(runId);
 
     if (run) {
@@ -2421,15 +2448,20 @@ export function agentRoutes(db: Db) {
     }
     assertCompanyAccess(req, issue.companyId);
 
-    let run = issue.executionRunId ? await heartbeat.getRun(issue.executionRunId) : null;
-    if (run && run.status !== "queued" && run.status !== "running") {
+    let run = issue.executionRunId ? await heartbeat.getRunIssueSummary(issue.executionRunId) : null;
+    if (
+      run &&
+      (
+        (run.status !== "queued" && run.status !== "running") ||
+        run.issueId !== issue.id
+      )
+    ) {
       run = null;
     }
 
     if (!run && issue.assigneeAgentId && issue.status === "in_progress") {
-      const candidateRun = await heartbeat.getActiveRunForAgent(issue.assigneeAgentId);
-      const candidateContext = asRecord(candidateRun?.contextSnapshot);
-      const candidateIssueId = asNonEmptyString(candidateContext?.issueId);
+      const candidateRun = await heartbeat.getActiveRunIssueSummaryForAgent(issue.assigneeAgentId);
+      const candidateIssueId = asNonEmptyString(candidateRun?.issueId);
       if (candidateRun && candidateIssueId === issue.id) {
         run = candidateRun;
       }
@@ -2446,7 +2478,7 @@ export function agentRoutes(db: Db) {
     }
 
     res.json({
-      ...redactCurrentUserValue(run, await getCurrentUserRedactionOptions()),
+      ...run,
       agentId: agent.id,
       agentName: agent.name,
       adapterType: agent.adapterType,

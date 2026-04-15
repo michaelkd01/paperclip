@@ -3310,9 +3310,9 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
 
     for (const routine of selectedRoutineRows) {
       const taskSlug = taskSlugByRoutineId.get(routine.id)!;
-      const projectSlug = projectSlugById.get(routine.projectId) ?? null;
+      const projectSlug = routine.projectId ? (projectSlugById.get(routine.projectId) ?? null) : null;
       const taskPath = `tasks/${taskSlug}/TASK.md`;
-      const assigneeSlug = idToSlug.get(routine.assigneeAgentId) ?? null;
+      const assigneeSlug = routine.assigneeAgentId ? (idToSlug.get(routine.assigneeAgentId) ?? null) : null;
       files[taskPath] = buildMarkdown(
         {
           name: routine.title,
@@ -4388,7 +4388,7 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           billingCode: manifestIssue.billingCode,
           assigneeAdapterOverrides: manifestIssue.assigneeAdapterOverrides,
           executionWorkspaceSettings: manifestIssue.executionWorkspaceSettings,
-          labelIds: [],
+          labelIds: manifestIssue.labelIds ?? [],
         });
       }
     }
