@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
@@ -368,6 +369,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   });
   const effectiveInstructionsFilePath = promptBundle.instructionsFilePath ?? undefined;
 
+  // MCP config restriction: when mcpConfig is set, restrict which MCP servers
+  // are available to the Claude CLI via --strict-mcp-config / --mcp-config.
+  const rawMcpConfig = config.mcpConfig;
+  let mcpConfigFilePath: string | null = null;
+  const useStrictMcpConfig = rawMcpConfig != null;
+  if (useStrictMcpConfig && typeof rawMcpConfig === "object" && Object.keys(rawMcpConfig as object).length > 0) {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-mcp-"));
+    mcpConfigFilePath = path.join(tmpDir, "mcp-config.json");
+    await fs.writeFile(mcpConfigFilePath, JSON.stringify(rawMcpConfig), "utf-8");
+  }
+
   const runtimeSessionParams = parseObject(runtime.sessionParams);
   const runtimeSessionId = asString(runtimeSessionParams.sessionId, runtime.sessionId ?? "");
   const runtimeSessionCwd = asString(runtimeSessionParams.cwd, "");
@@ -448,6 +460,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     // per heartbeat and the Claude CLI may reject the combination outright.
     if (attemptInstructionsFilePath && !resumeSessionId) {
       args.push("--append-system-prompt-file", attemptInstructionsFilePath);
+    }
+    if (useStrictMcpConfig) {
+      args.push("--strict-mcp-config");
+      if (mcpConfigFilePath) {
+        args.push("--mcp-config", mcpConfigFilePath);
+      }
     }
     args.push("--add-dir", promptBundle.addDir);
     if (extraArgs.length > 0) args.push(...extraArgs);
@@ -642,21 +660,32 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     };
   };
 
-  const initial = await runAttempt(sessionId ?? null);
-  if (
-    sessionId &&
-    !initial.proc.timedOut &&
-    (initial.proc.exitCode ?? 0) !== 0 &&
-    initial.parsed &&
-    isClaudeUnknownSessionError(initial.parsed)
-  ) {
-    await onLog(
-      "stdout",
-      `[paperclip] Claude resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
-    );
-    const retry = await runAttempt(null);
-    return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
-  }
+  const cleanupMcpConfigFile = async () => {
+    if (mcpConfigFilePath) {
+      const tmpDir = path.dirname(mcpConfigFilePath);
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  };
 
-  return toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId });
+  try {
+    const initial = await runAttempt(sessionId ?? null);
+    if (
+      sessionId &&
+      !initial.proc.timedOut &&
+      (initial.proc.exitCode ?? 0) !== 0 &&
+      initial.parsed &&
+      isClaudeUnknownSessionError(initial.parsed)
+    ) {
+      await onLog(
+        "stdout",
+        `[paperclip] Claude resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+      );
+      const retry = await runAttempt(null);
+      return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
+    }
+
+    return toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId });
+  } finally {
+    await cleanupMcpConfigFile();
+  }
 }

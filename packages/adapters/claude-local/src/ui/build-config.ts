@@ -97,5 +97,7 @@ export function buildClaudeLocalConfig(v: CreateConfigValues): Record<string, un
   }
   if (v.command) ac.command = v.command;
   if (v.extraArgs) ac.extraArgs = parseCommaArgs(v.extraArgs);
+  const mcpConfig = v.adapterSchemaValues?.mcpConfig;
+  if (mcpConfig !== undefined && mcpConfig !== null) ac.mcpConfig = mcpConfig;
   return ac;
 }
