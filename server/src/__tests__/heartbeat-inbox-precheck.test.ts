@@ -218,7 +218,7 @@ describeEmbeddedPostgres("heartbeat inbox precheck", () => {
     expect(result).not.toBeNull();
   });
 
-  it("defaults to reactive when mode is not set", async () => {
+  it("defaults to proactive when mode is not set", async () => {
     // Seed agent without explicit mode
     const companyId = randomUUID();
     const agentId = randomUUID();
@@ -245,16 +245,9 @@ describeEmbeddedPostgres("heartbeat inbox precheck", () => {
 
     const heartbeat = heartbeatService(db);
 
-    // No mode set, empty inbox — should skip (defaults to reactive)
+    // No mode set, empty inbox — should NOT skip (defaults to proactive)
     const result = await heartbeat.invoke(agentId, "timer", {}, "system");
-    expect(result).toBeNull();
-
-    const requests = await db
-      .select()
-      .from(agentWakeupRequests)
-      .where(eq(agentWakeupRequests.agentId, agentId));
-    expect(requests).toHaveLength(1);
-    expect(requests[0].reason).toBe("heartbeat.empty_inbox");
+    expect(result).not.toBeNull();
   });
 
   it("records skipped run with correct metadata", async () => {

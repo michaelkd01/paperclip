@@ -2410,8 +2410,12 @@ export function heartbeatService(db: Db) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
 
-    const rawMode = typeof heartbeat.mode === "string" ? heartbeat.mode : null;
-    const mode: "reactive" | "proactive" = rawMode === "proactive" ? "proactive" : "reactive";
+    const rawMode = typeof heartbeat.heartbeatMode === "string"
+      ? heartbeat.heartbeatMode
+      : typeof heartbeat.mode === "string"
+        ? heartbeat.mode
+        : null;
+    const mode: "reactive" | "proactive" = rawMode === "reactive" ? "reactive" : "proactive";
 
     return {
       enabled: asBoolean(heartbeat.enabled, false),
@@ -4376,18 +4380,43 @@ export function heartbeatService(db: Db) {
 
     // Skip timer heartbeats for reactive agents with empty inbox
     if (source === "timer" && policy.mode === "reactive") {
-      const assignedIssues = await issuesSvc.list(agent.companyId, {
-        assigneeAgentId: agent.id,
-        status: "todo,in_progress",
-        limit: 1,
-      });
-      if (assignedIssues.length === 0) {
-        await writeSkippedRequest("heartbeat.empty_inbox");
-        logger.info(
-          { agentId: agent.id, agentName: agent.name },
-          "Skipping timer heartbeat: empty inbox (reactive mode)",
-        );
-        return null;
+      const isConductor = agent.role === "pm" || /conductor/i.test(agent.name);
+
+      if (isConductor) {
+        // Conductor agents check for unassigned todo issues in their company
+        const [{ count: unassignedCount }] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(issues)
+          .where(
+            and(
+              eq(issues.companyId, agent.companyId),
+              isNull(issues.assigneeAgentId),
+              eq(issues.status, "todo"),
+            ),
+          );
+        if (Number(unassignedCount) === 0) {
+          await writeSkippedRequest("heartbeat.empty_inbox");
+          logger.info(
+            { agentId: agent.id, agentName: agent.name },
+            "Skipping timer heartbeat: no unassigned work (reactive mode)",
+          );
+          return null;
+        }
+      } else {
+        // Regular agents check for issues assigned to them
+        const assignedIssues = await issuesSvc.list(agent.companyId, {
+          assigneeAgentId: agent.id,
+          status: "todo,in_progress",
+          limit: 1,
+        });
+        if (assignedIssues.length === 0) {
+          await writeSkippedRequest("heartbeat.empty_inbox");
+          logger.info(
+            { agentId: agent.id, agentName: agent.name },
+            "Skipping timer heartbeat: empty inbox (reactive mode)",
+          );
+          return null;
+        }
       }
     }
 
