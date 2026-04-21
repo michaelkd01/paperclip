@@ -63,3 +63,6 @@ export { pluginEntities } from "./plugin_entities.js";
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
+export { stageEnum, parseStatusEnum, traces } from "./traces.js";
+export { eventTypeEnum, traceEvents } from "./trace_events.js";
+export { payloadTypeEnum, handoffPayloads } from "./handoff_payloads.js";
