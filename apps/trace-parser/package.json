@@ -1,0 +1,37 @@
+{
+  "name": "@paperclipai/trace-parser",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && node scripts/build.mjs",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.888.0",
+    "@paperclipai/db": "workspace:*",
+    "drizzle-orm": "^0.38.4",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "embedded-postgres": "^18.1.0-beta.16",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
