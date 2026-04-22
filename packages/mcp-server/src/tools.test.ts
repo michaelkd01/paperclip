@@ -145,6 +145,95 @@ describe("paperclip MCP tools", () => {
     expect(response.content[0]?.text).toContain("path must start with /");
   });
 
+  it("trace_search passes filters as query string to /traces", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse([{ traceId: "t1", stage: "executor" }]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tool = getTool("paperclipTraceSearch");
+    const response = await tool.execute({
+      stage: "executor",
+      limit: 5,
+      benchmarkOnly: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0] as [string];
+    const parsed = new URL(String(url));
+    expect(parsed.pathname).toBe("/api/traces");
+    expect(parsed.searchParams.get("stage")).toBe("executor");
+    expect(parsed.searchParams.get("limit")).toBe("5");
+    expect(parsed.searchParams.get("benchmarkOnly")).toBe("true");
+    // Default company ID from client config is passed
+    expect(parsed.searchParams.get("companyId")).toBe("11111111-1111-1111-1111-111111111111");
+    expect(response.content[0]?.text).toContain("t1");
+  });
+
+  it("trace_search uses explicit companyId over default", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse([]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tool = getTool("paperclipTraceSearch");
+    await tool.execute({
+      companyId: "99999999-9999-9999-9999-999999999999",
+    });
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    const parsed = new URL(String(url));
+    expect(parsed.searchParams.get("companyId")).toBe("99999999-9999-9999-9999-999999999999");
+  });
+
+  it("trace_get calls /traces/:traceId with flags", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        trace: { traceId: "t1" },
+        digest: "# digest",
+        raw: null,
+        events: [{ eventId: "e1" }],
+        eventsTruncated: false,
+        handoffPayloads: [],
+        warnings: [],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tool = getTool("paperclipTraceGet");
+    const response = await tool.execute({
+      traceId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      includeDigest: true,
+      includeRaw: false,
+      includeEvents: true,
+      eventsLimit: 100,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0] as [string];
+    const parsed = new URL(String(url));
+    expect(parsed.pathname).toBe("/api/traces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    expect(parsed.searchParams.get("includeDigest")).toBe("true");
+    expect(parsed.searchParams.get("includeRaw")).toBe("false");
+    expect(parsed.searchParams.get("eventsLimit")).toBe("100");
+    expect(response.content[0]?.text).toContain("digest");
+  });
+
+  it("trace_get returns error for non-existent trace", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({ error: "Trace not found" }, 404),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tool = getTool("paperclipTraceGet");
+    const response = await tool.execute({
+      traceId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    });
+
+    // Error response is formatted via formatErrorResponse
+    expect(response.content[0]?.text).toContain("404");
+  });
+
   it("rejects generic request paths that escape /api", async () => {
     vi.stubGlobal("fetch", vi.fn());
 

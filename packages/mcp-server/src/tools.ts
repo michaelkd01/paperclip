@@ -118,6 +118,28 @@ const createApprovalToolSchema = z.object({
   companyId: companyIdOptional,
 }).merge(createApprovalSchema);
 
+const traceSearchSchema = z.object({
+  companyId: z.string().uuid().optional(),
+  issueId: z.string().uuid().optional(),
+  stage: z.enum(["pre-planner", "executor", "test", "ux-verifier", "supervisor", "conductor", "ceo"]).optional(),
+  agentId: z.string().uuid().optional(),
+  outcomeMarker: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  parseStatus: z.enum(["pending", "parsed", "failed", "expired"]).optional(),
+  benchmarkOnly: z.boolean().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const traceGetSchema = z.object({
+  traceId: z.string().uuid(),
+  includeRaw: z.boolean().optional(),
+  includeDigest: z.boolean().optional(),
+  includeEvents: z.boolean().optional(),
+  includeHandoffPayloads: z.boolean().optional(),
+  eventsLimit: z.number().int().min(1).max(5000).optional(),
+});
+
 const apiRequestSchema = z.object({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   path: z.string().min(1),
@@ -409,6 +431,42 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         client.requestJson("POST", `/approvals/${encodeURIComponent(approvalId)}/comments`, {
           body: { body },
         }),
+    ),
+    makeTool(
+      "paperclipTraceSearch",
+      "Search execution traces with optional filters. Returns metadata rows sorted by newest first.",
+      traceSearchSchema,
+      async (input) => {
+        const params = new URLSearchParams();
+        const companyId = input.companyId ?? client.defaults.companyId;
+        if (companyId) params.set("companyId", companyId);
+        if (input.issueId) params.set("issueId", input.issueId);
+        if (input.stage) params.set("stage", input.stage);
+        if (input.agentId) params.set("agentId", input.agentId);
+        if (input.outcomeMarker) params.set("outcomeMarker", input.outcomeMarker);
+        if (input.from) params.set("from", input.from);
+        if (input.to) params.set("to", input.to);
+        if (input.parseStatus) params.set("parseStatus", input.parseStatus);
+        if (input.benchmarkOnly) params.set("benchmarkOnly", "true");
+        if (input.limit !== undefined) params.set("limit", String(input.limit));
+        const qs = params.toString();
+        return client.requestJson("GET", `/traces${qs ? `?${qs}` : ""}`);
+      },
+    ),
+    makeTool(
+      "paperclipTraceGet",
+      "Get a single execution trace by ID with optional digest, raw JSONL, events, and handoff payloads. Warning: includeRaw can return multiple MB of data.",
+      traceGetSchema,
+      async (input) => {
+        const params = new URLSearchParams();
+        if (input.includeRaw !== undefined) params.set("includeRaw", String(input.includeRaw));
+        if (input.includeDigest !== undefined) params.set("includeDigest", String(input.includeDigest));
+        if (input.includeEvents !== undefined) params.set("includeEvents", String(input.includeEvents));
+        if (input.includeHandoffPayloads !== undefined) params.set("includeHandoffPayloads", String(input.includeHandoffPayloads));
+        if (input.eventsLimit !== undefined) params.set("eventsLimit", String(input.eventsLimit));
+        const qs = params.toString();
+        return client.requestJson("GET", `/traces/${encodeURIComponent(input.traceId)}${qs ? `?${qs}` : ""}`);
+      },
     ),
     makeTool(
       "paperclipApiRequest",
