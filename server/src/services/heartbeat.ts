@@ -27,6 +27,7 @@ import { getServerAdapter, runningProcesses } from "../adapters/index.js";
 import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec, UsageSummary } from "../adapters/index.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
+import { captureTrace } from "./trace-capture.js";
 import { costService } from "./costs.js";
 import { trackAgentFirstHeartbeat } from "@paperclipai/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
@@ -3831,8 +3832,35 @@ export function heartbeatService(db: Db) {
         adapterResult.summary ?? null,
       );
 
+      // ADR-004-3: fail-soft trace capture hook (success path)
+      const traceEndedAt = new Date();
+      try {
+        await captureTrace({
+          db,
+          runId: run.id,
+          companyId: agent.companyId,
+          issueId: issueId ?? null,
+          agentId: agent.id,
+          agentRole: agent.role ?? null,
+          model: readNonEmptyString(adapterResult.model) ?? null,
+          sessionId: adapterResult.sessionId ?? runtimeForAdapter.sessionDisplayId ?? runtimeForAdapter.sessionId ?? null,
+          startedAt: run.startedAt ?? run.createdAt,
+          endedAt: traceEndedAt,
+          tokensInTotal: normalizedUsage?.inputTokens ?? rawUsage?.inputTokens ?? null,
+          tokensOutTotal: normalizedUsage?.outputTokens ?? rawUsage?.outputTokens ?? null,
+          outcomeMarker: null,
+          adapterCwd: executionWorkspace.cwd ?? null,
+        });
+      } catch (traceErr) {
+        console.warn(JSON.stringify({
+          event: "trace_capture_outer_failure",
+          error: String(traceErr),
+          run_id: run.id,
+        }));
+      }
+
       await setRunStatus(run.id, status, {
-        finishedAt: new Date(),
+        finishedAt: traceEndedAt,
         error:
           outcome === "succeeded"
             ? null
@@ -3951,10 +3979,37 @@ export function heartbeatService(db: Db) {
         }
       }
 
+      // ADR-004-3: fail-soft trace capture hook (error path)
+      const errorTraceEndedAt = new Date();
+      try {
+        await captureTrace({
+          db,
+          runId: run.id,
+          companyId: agent.companyId,
+          issueId: issueId ?? null,
+          agentId: agent.id,
+          agentRole: agent.role ?? null,
+          model: null,
+          sessionId: runtimeForAdapter.sessionDisplayId ?? runtimeForAdapter.sessionId ?? null,
+          startedAt: run.startedAt ?? run.createdAt,
+          endedAt: errorTraceEndedAt,
+          tokensInTotal: null,
+          tokensOutTotal: null,
+          outcomeMarker: null,
+          adapterCwd: executionWorkspace?.cwd ?? null,
+        });
+      } catch (traceErr) {
+        console.warn(JSON.stringify({
+          event: "trace_capture_outer_failure",
+          error: String(traceErr),
+          run_id: run.id,
+        }));
+      }
+
       const failedRun = await setRunStatus(run.id, "failed", {
         error: message,
         errorCode: "adapter_failed",
-        finishedAt: new Date(),
+        finishedAt: errorTraceEndedAt,
         stdoutExcerpt,
         stderrExcerpt,
         logBytes: logSummary?.bytes,
