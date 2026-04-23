@@ -61,10 +61,61 @@ function cwdToProjectSlug(cwd: string): string {
 }
 
 /**
+ * Poll for a session transcript JSONL file with exponential backoff.
+ *
+ * ADR-004-3a: The Claude Code subprocess may not have finished flushing the
+ * JSONL file by the time the post-run hook fires. This function polls with
+ * exponential backoff before giving up.
+ *
+ * @param sessionId - The session ID (used to derive the filename `<sessionId>.jsonl`)
+ * @param projectDir - The directory to look in for the file
+ * @returns The file path if found, or null after exhausting retries
+ */
+export async function locateTranscript(
+  sessionId: string,
+  projectDir: string,
+): Promise<string | null> {
+  const filePath = path.join(projectDir, `${sessionId}.jsonl`);
+  const maxRetries = 5;
+  const baseDelay = 500; // ms
+
+  // Initial check
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.size > 0) return filePath;
+  } catch {
+    // File doesn't exist yet
+  }
+
+  // Retry with exponential backoff
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const delay = baseDelay * Math.pow(2, attempt);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.size > 0) return filePath;
+    } catch {
+      // File still doesn't exist
+    }
+  }
+
+  // Exhausted retries
+  console.log(
+    JSON.stringify({
+      event: "transcript_flush_timeout",
+      sessionId,
+      projectDir,
+      retryCount: maxRetries,
+    }),
+  );
+  return null;
+}
+
+/**
  * Resolve the session transcript JSONL file for a given session.
  *
  * Strategy: sessionId-first, mtime fallback.
- *  1. If sessionId and adapterCwd are known, try the direct path.
+ *  1. If sessionId and adapterCwd are known, try the direct path (with polling).
  *  2. If sessionId is known but cwd is not (or direct path missing), scan all project dirs.
  *  3. If sessionId is unknown, scan by mtime (within 5s of endedAt).
  *
@@ -77,17 +128,13 @@ async function resolveSessionTranscript(args: {
 }): Promise<{ path: string; strategy: "session_id_direct" | "session_id_scan" | "mtime_scan" } | null> {
   const claudeProjectsDir = path.join(os.homedir(), ".claude", "projects");
 
-  // Strategy 1: direct path from sessionId + cwd
+  // Strategy 1: direct path from sessionId + cwd (with exponential backoff polling)
   if (args.sessionId && args.adapterCwd) {
     const slug = cwdToProjectSlug(args.adapterCwd);
-    const directPath = path.join(claudeProjectsDir, slug, `${args.sessionId}.jsonl`);
-    try {
-      const stat = await fs.stat(directPath);
-      if (stat.size > 0) {
-        return { path: directPath, strategy: "session_id_direct" };
-      }
-    } catch {
-      // File doesn't exist at direct path — fall through
+    const projectDir = path.join(claudeProjectsDir, slug);
+    const found = await locateTranscript(args.sessionId, projectDir);
+    if (found) {
+      return { path: found, strategy: "session_id_direct" };
     }
   }
 
