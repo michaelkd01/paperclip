@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.paperclip.trace-cleanup</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/node</string>
+		<string>/Users/michaeldavidson/Developer/paperclip/apps/trace-cleanup/dist/bundle.mjs</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>2</integer>
+		<key>Minute</key>
+		<integer>0</integer>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>/tmp/paperclip-trace-cleanup.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/paperclip-trace-cleanup.err</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/michaeldavidson</string>
+		<key>NODE_ENV</key>
+		<string>production</string>
+		<key>PAPERCLIP_TRACES_R2_ACCESS_KEY_ID</key>
+		<string>82e410528ce55eabd41657b7045e3dac</string>
+		<key>PAPERCLIP_TRACES_R2_BUCKET</key>
+		<string>paperclip-traces</string>
+		<key>PAPERCLIP_TRACES_R2_ENDPOINT</key>
+		<string>https://02a3489d184704f193a4f7891a8cd515.r2.cloudflarestorage.com</string>
+		<key>PAPERCLIP_TRACES_R2_SECRET_ACCESS_KEY</key>
+		<string>9353aff95a1a885584084a2bf2f1ce305c4b46980e837fe9fc79750875abc513</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+</dict>
+</plist>

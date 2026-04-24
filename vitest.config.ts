@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     projects: [
+      "apps/trace-cleanup",
       "apps/trace-parser",
       "packages/db",
       "packages/adapters/codex-local",
