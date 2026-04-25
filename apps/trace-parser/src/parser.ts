@@ -253,36 +253,43 @@ export function parseTrace(input: ParseInput): ParseResult {
   };
 }
 
-function buildToolUseResultPreview(result: Record<string, unknown>): string | null {
+export function buildToolUseResultPreview(result: unknown): string | null {
+  if (typeof result === "string") {
+    return result.length > 200 ? result.slice(0, 200) : result;
+  }
+  if (typeof result !== "object" || result === null || Array.isArray(result)) {
+    return null;
+  }
+  const obj = result as Record<string, unknown>;
   const parts: string[] = [];
 
   // Bash-style result
-  if ("stdout" in result || "stderr" in result) {
-    if (result.exitCode !== undefined) parts.push(`exit=${result.exitCode}`);
-    if (typeof result.stdout === "string" && result.stdout.length > 0) {
-      parts.push(`stdout=${result.stdout.slice(0, 200)}`);
+  if ("stdout" in obj || "stderr" in obj) {
+    if (obj.exitCode !== undefined) parts.push(`exit=${obj.exitCode}`);
+    if (typeof obj.stdout === "string" && obj.stdout.length > 0) {
+      parts.push(`stdout=${obj.stdout.slice(0, 200)}`);
     }
-    if (typeof result.stderr === "string" && result.stderr.length > 0) {
-      parts.push(`stderr=${result.stderr.slice(0, 100)}`);
+    if (typeof obj.stderr === "string" && obj.stderr.length > 0) {
+      parts.push(`stderr=${obj.stderr.slice(0, 100)}`);
     }
-    if (result.interrupted) parts.push("interrupted");
+    if (obj.interrupted) parts.push("interrupted");
   }
 
   // Skill-style result
-  if ("commandName" in result) {
-    parts.push(`skill=${result.commandName}`);
-    if (result.success !== undefined) parts.push(`success=${result.success}`);
+  if ("commandName" in obj) {
+    parts.push(`skill=${obj.commandName}`);
+    if (obj.success !== undefined) parts.push(`success=${obj.success}`);
   }
 
   // Read-style result
-  if ("file" in result && "type" in result && !("stdout" in result)) {
-    parts.push(`file=${result.file}`);
+  if ("file" in obj && "type" in obj && !("stdout" in obj)) {
+    parts.push(`file=${obj.file}`);
   }
 
   // Glob-style result
-  if ("filenames" in result) {
-    parts.push(`files=${result.numFiles}`);
-    if (result.truncated) parts.push("truncated");
+  if ("filenames" in obj) {
+    parts.push(`files=${obj.numFiles}`);
+    if (obj.truncated) parts.push("truncated");
   }
 
   return parts.length > 0 ? parts.join(" ") : null;
