@@ -40,6 +40,8 @@ export interface TraceMetadata {
   durationMs: number | null;
   tokensInTotal: number | null;
   tokensOutTotal: number | null;
+  tokensInPerRun: number | null;
+  tokensOutPerRun: number | null;
   outcomeMarker: string | null;
   parseStatus: string;
   parserVersion: string | null;
@@ -111,6 +113,8 @@ function toMetadata(row: typeof traces.$inferSelect): TraceMetadata {
     durationMs: row.durationMs,
     tokensInTotal: row.tokensInTotal,
     tokensOutTotal: row.tokensOutTotal,
+    tokensInPerRun: row.tokensInPerRun,
+    tokensOutPerRun: row.tokensOutPerRun,
     outcomeMarker: row.outcomeMarker,
     parseStatus: row.parseStatus,
     parserVersion: row.parserVersion,

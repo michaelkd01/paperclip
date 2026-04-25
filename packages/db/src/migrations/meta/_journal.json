@@ -414,6 +414,13 @@
       "when": 1776757486334,
       "tag": "0058_funny_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1777086392790,
+      "tag": "0059_neat_vargas",
+      "breakpoints": true
     }
   ]
 }

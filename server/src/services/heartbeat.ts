@@ -3846,8 +3846,18 @@ export function heartbeatService(db: Db) {
           sessionId: adapterResult.sessionId ?? runtimeForAdapter.sessionDisplayId ?? runtimeForAdapter.sessionId ?? null,
           startedAt: run.startedAt ?? run.createdAt,
           endedAt: traceEndedAt,
-          tokensInTotal: normalizedUsage?.inputTokens ?? rawUsage?.inputTokens ?? null,
+          tokensInTotal: normalizedUsage
+            ? (normalizedUsage.inputTokens ?? 0) + (normalizedUsage.cachedInputTokens ?? 0)
+            : rawUsage
+              ? (rawUsage.inputTokens ?? 0) + (rawUsage.cachedInputTokens ?? 0)
+              : null,
           tokensOutTotal: normalizedUsage?.outputTokens ?? rawUsage?.outputTokens ?? null,
+          tokensInPerRun: normalizedUsage
+            ? (normalizedUsage.inputTokens ?? 0) + (normalizedUsage.cachedInputTokens ?? 0)
+            : rawUsage
+              ? (rawUsage.inputTokens ?? 0) + (rawUsage.cachedInputTokens ?? 0)
+              : null,
+          tokensOutPerRun: normalizedUsage?.outputTokens ?? rawUsage?.outputTokens ?? null,
           outcomeMarker: null,
           adapterCwd: executionWorkspace.cwd ?? null,
         });
@@ -3995,6 +4005,8 @@ export function heartbeatService(db: Db) {
           endedAt: errorTraceEndedAt,
           tokensInTotal: null,
           tokensOutTotal: null,
+          tokensInPerRun: null,
+          tokensOutPerRun: null,
           outcomeMarker: null,
           adapterCwd: executionWorkspace?.cwd ?? null,
         });

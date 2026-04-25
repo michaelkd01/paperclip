@@ -40,6 +40,8 @@ export interface CaptureTraceArgs {
   endedAt: Date;
   tokensInTotal: number | null;
   tokensOutTotal: number | null;
+  tokensInPerRun: number | null;
+  tokensOutPerRun: number | null;
   outcomeMarker: string | null;
   /** The cwd the adapter ran in — used to locate the session transcript under ~/.claude/projects/ */
   adapterCwd: string | null;
@@ -360,6 +362,8 @@ export async function captureTrace(args: CaptureTraceArgs): Promise<CaptureTrace
         durationMs,
         tokensInTotal: args.tokensInTotal,
         tokensOutTotal: args.tokensOutTotal,
+        tokensInPerRun: args.tokensInPerRun,
+        tokensOutPerRun: args.tokensOutPerRun,
         outcomeMarker: args.outcomeMarker,
         r2RawKey,
         parseStatus: "pending",

@@ -58,6 +58,12 @@ export const traces = pgTable(
     durationMs: integer("duration_ms"),
     tokensInTotal: integer("tokens_in_total"),
     tokensOutTotal: integer("tokens_out_total"),
+    // Per-run input tokens (inputTokens + cachedInputTokens from harness usage_json).
+    // Set at INSERT, never modified by parser. Use these for reliable per-run cost.
+    tokensInPerRun: integer("tokens_in_per_run"),
+    // Per-run output tokens (outputTokens from harness usage_json).
+    // Set at INSERT, never modified by parser.
+    tokensOutPerRun: integer("tokens_out_per_run"),
     outcomeMarker: text("outcome_marker"),
     r2RawKey: text("r2_raw_key"),
     r2DigestKey: text("r2_digest_key"),
