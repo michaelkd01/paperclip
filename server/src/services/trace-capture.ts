@@ -252,6 +252,23 @@ export async function captureTrace(args: CaptureTraceArgs): Promise<CaptureTrace
   const warnings: string[] = [];
 
   try {
+    // Guard: skip capture for non-Claude agents. They have no Claude Code JSONL,
+    // so falling through to mtime-based transcript resolution would capture a
+    // concurrent Claude agent's session by accident (cross-agent contamination).
+    // Non-Claude usage data is already preserved in heartbeat_runs.usage_json.
+    const model = args.model ?? "";
+    if (!model.startsWith("claude-")) {
+      console.log(
+        JSON.stringify({
+          event: "trace_capture_skipped_non_claude_model",
+          runId: args.runId,
+          agentId: args.agentId,
+          model,
+        }),
+      );
+      return { traceId: null, r2RawKey: null, warnings: ["non_claude_model_skipped"] };
+    }
+
     // Guard: skip when issueId is null
     if (!args.issueId) {
       const result = { traceId: null, r2RawKey: null, warnings: ["no_issue_id_run_skipped"] };
